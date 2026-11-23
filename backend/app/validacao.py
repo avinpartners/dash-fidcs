@@ -136,7 +136,7 @@ def _run(out: dict[str, Any]) -> None:
         n = _dec(r.get("TAB_X_NR_COTST"))
         if n and n > 0:
             cot[_digits(r["CNPJ_FUNDO_CLASSE"])] += int(n)
-    adm_inf = {_digits(r["CNPJ_FUNDO_CLASSE"]): (r.get("ADMIN") or "").strip() for r in t1}
+    adm_inf = {_digits(r["CNPJ_FUNDO_CLASSE"]): _digits(r.get("CNPJ_ADMIN")) for r in t1}
 
     conferidos: collections.Counter = collections.Counter()
     prob: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
@@ -189,7 +189,8 @@ def _run(out: dict[str, Any]) -> None:
             conferidos["cotistas"] += 1
             if (cotistas or None) != (cot.get(cnpj) or None):
                 bad("cotistas", cnpj, nome, cotistas, cot.get(cnpj))
-            if adm_inf.get(cnpj) and adm_inf[cnpj].upper() != (admin or "").upper():
+            # compared by CNPJ: the informe spells names differently (accents, abbreviations)
+            if adm_inf.get(cnpj) and _digits(f.get("CNPJ_Administrador")) and adm_inf[cnpj] != _digits(f.get("CNPJ_Administrador")):
                 adm_mudou += 1
 
     no_dash = {r[0].strip() for r in rows}

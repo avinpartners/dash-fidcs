@@ -71,9 +71,9 @@ def main(argv: list[str]) -> int:
     # Search index for the Ctrl+K search (done in the browser in the online version).
     with connection() as conn:
         all_funds = [(r[0].strip(), r[1], r[2]) for r in conn.execute("SELECT cnpj, nome, gestor FROM fidcs").fetchall()]
-        groups = {col: conn.execute(f"""SELECT {col}, count(*) FROM fidcs WHERE {col} IS NOT NULL
-                                        GROUP BY {col} ORDER BY count(*) DESC""").fetchall()
-                  for col in ("gestor", "administrador")}
+        groups = {col: conn.execute(f"""SELECT nome, count(*) FROM (SELECT {expr} AS nome FROM fidcs) x
+                                        WHERE nome IS NOT NULL GROUP BY nome ORDER BY count(*) DESC""").fetchall()
+                  for col, expr in (("gestor", "unnest(string_to_array(gestor, '; '))"), ("administrador", "administrador"))}
     total += _write(out / "search.json", {
         "fidcs": [[c, n, g] for c, n, g in all_funds],
         "cedentes": [[c, ced_names.get(c)] for c in ced_ids],

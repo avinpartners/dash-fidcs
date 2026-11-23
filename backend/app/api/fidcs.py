@@ -143,7 +143,7 @@ def fidc(ident: str):
         mesma_gestora = fetch_all(conn, """
             SELECT f2.cnpj, f2.nome, m.pl, m.segmento FROM fidcs f2
             JOIN fidc_mensal m ON m.cnpj = f2.cnpj AND m.competencia = f2.ultima_competencia
-            WHERE f2.gestor = %s AND f2.cnpj <> %s ORDER BY m.pl DESC NULLS LAST LIMIT 12""",
+            WHERE string_to_array(f2.gestor, '; ') && string_to_array(%s, '; ') AND f2.cnpj <> %s ORDER BY m.pl DESC NULLS LAST LIMIT 12""",
             (f["gestor"], cnpj)) if f.get("gestor") else []
     for c in cedentes:
         c["cnpj_cedente_fmt"] = format_cnpj(c["cnpj_cedente"])
@@ -159,6 +159,12 @@ def fidc(ident: str):
 
 
 def _group(field: str):
+    # A co-managed FIDC (several gestoras, "A; B") counts in full for each of its gestoras.
+    if field == "gestor":
+        field = "g.nome"
+        join = "CROSS JOIN LATERAL unnest(string_to_array(base.gestor, '; ')) AS g(nome)"
+    else:
+        join = ""
     with connection() as conn:
         comp = latest_month(conn)
         if comp is None:
@@ -174,7 +180,7 @@ def _group(field: str):
                    percentile_cont(0.5) WITHIN GROUP (ORDER BY subordinacao) AS sub_mediana,
                    mode() WITHIN GROUP (ORDER BY segmento) AS segmento_principal,
                    count(*) FILTER (WHERE situacao IN ('Em Liquidação', 'Cancelado')) AS em_liquidacao
-            FROM base WHERE {field} IS NOT NULL GROUP BY {field}
+            FROM base {join} WHERE {field} IS NOT NULL GROUP BY {field}
             ORDER BY sum(pl) FILTER (WHERE NOT fic) DESC NULLS LAST""", {"comp": comp, "fic": FIC_MIN})
     return clean({"competencia": comp, "rows": rows})
 
@@ -256,9 +262,9 @@ def search(q: str = Query("", max_length=120)):
                                     ORDER BY (nome ILIKE %s) DESC, similarity(nome, %s) DESC LIMIT 12""",
                            (like, text, like, text)):
             hits.append({"kind": "fidc", "id": r["cnpj"].strip(), "label": r["nome"], "sub": r["gestor"]})
-        for kind, col in (("gestora", "gestor"), ("administrador", "administrador")):
-            for r in fetch_all(conn, f"""SELECT {col} AS nome, count(*) AS n FROM fidcs WHERE {col} ILIKE %s
-                                         GROUP BY {col} ORDER BY count(*) DESC LIMIT 5""", (like,)):
+        for kind, col in (("gestora", "unnest(string_to_array(gestor, '; '))"), ("administrador", "administrador")):
+            for r in fetch_all(conn, f"""SELECT nome, count(*) AS n FROM (SELECT {col} AS nome FROM fidcs) x
+                                         WHERE nome ILIKE %s GROUP BY nome ORDER BY count(*) DESC LIMIT 5""", (like,)):
                 hits.append({"kind": kind, "id": r["nome"], "label": r["nome"], "sub": f"{r['n']} FIDCs"})
     seen, out = set(), []
     for h in hits:

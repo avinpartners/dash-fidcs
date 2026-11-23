@@ -4,7 +4,7 @@ import { api, fidcList, type FidcRow, type HomeMonth } from "../api";
 import { EChart } from "../components/EChart";
 import { Card, Empty, ErrorBox, Kpi, Loading } from "../components/ui";
 import { barsH, monthChart } from "../charts/fidc";
-import { fmtBRLCompact, fmtDate, fmtInt, fmtIntCompact, fmtMonth, fmtPct, fmtPctSigned } from "../format";
+import { fmtBRLCompact, fmtDate, fmtInt, fmtIntCompact, fmtMonth, fmtPct, fmtPctSigned, gestoras } from "../format";
 import { useApi, useDocumentTitle } from "../lib/hooks";
 
 function delta(cur: number | null | undefined, prev: number | null | undefined) {
@@ -17,9 +17,9 @@ function DeltaSub({ v, label = "vs. mês anterior" }: { v: number | null; label?
   return <span className={v >= 0 ? "pos" : "neg"}>{fmtPctSigned(v, 1)} <span className="muted">{label}</span></span>;
 }
 
-function sumBy(rows: FidcRow[], key: (r: FidcRow) => string | null, val: (r: FidcRow) => number): [string, number][] {
+function sumBy(rows: FidcRow[], key: (r: FidcRow) => string | null | string[], val: (r: FidcRow) => number): [string, number][] {
   const m = new Map<string, number>();
-  rows.forEach((r) => { const k = key(r); if (k) m.set(k, (m.get(k) ?? 0) + val(r)); });
+  rows.forEach((r) => { const k = key(r); (Array.isArray(k) ? k : [k]).forEach((x) => { if (x) m.set(x, (m.get(x) ?? 0) + val(r)); }); });
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
@@ -106,9 +106,9 @@ export function Home() {
 
       {list.error ? <ErrorBox error={list.error} onRetry={list.reload} /> : !list.data ? <Loading label="Carregando os fundos…" /> : (
         <div className="two-col">
-          <Card title="Maiores gestoras por PL" actions={<Link className="btn btn-sm" to="/gestoras">Todas</Link>}>
+          <Card title="Maiores gestoras por PL" subtitle="FIDC em cogestão conta inteiro para cada gestora" actions={<Link className="btn btn-sm" to="/gestoras">Todas</Link>}>
             <EChart height={320} fileName="gestoras" ariaLabel="Maiores gestoras" deps={[rows]}
-                    build={(t) => barsH(t, sumBy(semFic, (r) => r.gestor, (r) => r.pl ?? 0).slice(0, 12), "brl")} />
+                    build={(t) => barsH(t, sumBy(semFic, (r) => gestoras(r.gestor), (r) => r.pl ?? 0).slice(0, 12), "brl")} />
           </Card>
           <Card title="Quem investe nos FIDCs" subtitle="Fundos por tipo de cotista predominante (mais da metade dos cotistas)">
             <EChart height={320} fileName="alocadores" ariaLabel="Fundos por tipo de alocador" deps={[rows]}

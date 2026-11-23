@@ -4,7 +4,7 @@ import { api, type Mensal } from "../api";
 import { EChart } from "../components/EChart";
 import { Card, Empty, ErrorBox, KV, Kpi, Loading, SituacaoTag } from "../components/ui";
 import { barsH, barsV, monthChart } from "../charts/fidc";
-import { fmtBRL, fmtBRLCompact, fmtBRLCota, fmtDate, fmtInt, fmtMonth, fmtNumber, fmtPct, fmtPctSigned } from "../format";
+import { fmtBRL, fmtBRLCompact, fmtBRLCota, fmtDate, fmtInt, fmtMonth, fmtNumber, fmtPct, fmtPctSigned, gestoras } from "../format";
 import { useApi, useDocumentTitle } from "../lib/hooks";
 
 const AGING_LABEL: Record<string, string> = {
@@ -47,7 +47,8 @@ export default function Fidc() {
             <SituacaoTag s={f.situacao} />
             {fic && <span className="tag" title="Carteira com mais da metade em cotas de outros FIDCs">FIC-FIDC</span>}
             {last?.segmento && <span className="tag">{last.segmento}{last.subsegmento && last.subsegmento !== last.segmento ? ` · ${last.subsegmento}` : ""}</span>}
-            {f.gestor && <span>Gestor: <Link to={`/fidcs?gestor=${encodeURIComponent(f.gestor)}`}>{f.gestor}</Link></span>}
+            {f.gestor && <span>{gestoras(f.gestor).length > 1 ? "Gestoras (cogestão)" : "Gestor"}:{" "}
+              {gestoras(f.gestor).map((g, i) => <span key={g}>{i > 0 && " · "}<Link to={`/fidcs?gestor=${encodeURIComponent(g)}`}>{g}</Link></span>)}</span>}
             {f.administrador && <span className="muted">· Administrador: <Link to={`/fidcs?administrador=${encodeURIComponent(String(f.administrador))}`}>{String(f.administrador)}</Link></span>}
           </div>
         </div>
@@ -176,7 +177,7 @@ export default function Fidc() {
                 <KV label="Situação">{txt(f.situacao)}{f.data_situacao ? ` desde ${fmtDate(String(f.data_situacao))}` : ""}</KV>
                 <KV label="Constituição">{fmtDate(f.data_constituicao as string | null)}</KV>
                 <KV label="Adaptação à RCVM 175">{fmtDate(f.adaptacao_175 as string | null)}</KV>
-                <KV label="Gestor">{txt(f.gestor)}</KV>
+                <KV label={gestoras(f.gestor).length > 1 ? "Gestoras (cogestão)" : "Gestor"}>{f.gestor ? gestoras(f.gestor).join(" · ") : txt(f.gestor)}</KV>
                 <KV label="Administrador">{txt(f.administrador)}</KV>
                 <KV label="Custodiante">{txt(f.custodiante)}</KV>
                 <KV label="Auditor">{txt(f.auditor)}</KV>
@@ -201,7 +202,7 @@ export default function Fidc() {
             </Card>
           )}
           {data.mesma_gestora.length > 0 && (
-            <Card title="Outros FIDCs da gestora" actions={f.gestor ? <Link className="btn btn-sm" to={`/fidcs?gestor=${encodeURIComponent(f.gestor)}`}>Todos</Link> : undefined}>
+            <Card title="Outros FIDCs da gestora" actions={f.gestor && gestoras(f.gestor).length === 1 ? <Link className="btn btn-sm" to={`/fidcs?gestor=${encodeURIComponent(f.gestor)}`}>Todos</Link> : undefined}>
               <table className="grid compact"><tbody>{data.mesma_gestora.map((c) => (
                 <tr key={c.cnpj}><td className="wrap"><Link to={`/fidcs/${c.cnpj}`}>{c.nome}</Link></td><td className="small">{c.segmento ?? "—"}</td>
                   <td className="num">{fmtBRLCompact(c.pl)}</td></tr>))}</tbody></table>

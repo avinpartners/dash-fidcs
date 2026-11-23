@@ -651,15 +651,27 @@ def _g(row: dict[str, str], *names: str) -> str | None:
     return None
 
 
+GESTOR_SEP = "; "
+
+
 def build_cadastro(fundos: list[dict[str, str]], classes: list[dict[str, str]]
                    ) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
     """cadastro_cvm rows (classes first; a fund's own CNPJ when no class has it) and (cnpj, nome) names."""
     fund_by_id: dict[str, dict[str, str]] = {}
+    # A fund managed by more than one gestora (cogestão) has one registro_fundo row per gestora, same ID and CNPJ.
+    gestores_by_id: dict[str, list[tuple[str, str | None]]] = {}
     names: dict[str, str] = {}
     for f in fundos:
         fid = _g(f, "ID_Registro_Fundo")
         if fid:
-            fund_by_id[fid] = f
+            fund_by_id.setdefault(fid, f)
+            nome_g = text(f.get("Gestor"))
+            if nome_g:
+                kind = (_g(f, "Tipo_Pessoa_Gestor") or "").upper()
+                doc = company_cnpj(f.get("CPF_CNPJ_Gestor")) if kind != "PF" else None
+                lst = gestores_by_id.setdefault(fid, [])
+                if all(n != nome_g for n, _ in lst):
+                    lst.append((nome_g, doc))
         for c, n in ((f.get("CNPJ_Fundo"), f.get("Denominacao_Social")), (f.get("CNPJ_Administrador"), f.get("Administrador"))):
             if (c14 := company_cnpj(c)) and text(n):
                 names.setdefault(c14, text(n))
@@ -668,9 +680,12 @@ def build_cadastro(fundos: list[dict[str, str]], classes: list[dict[str, str]]
             names.setdefault(c14, text(f.get("Gestor")))
 
     def gestor(f: dict[str, str]) -> tuple[str | None, str | None]:
-        doc = _g(f, "CPF_CNPJ_Gestor")
-        kind = (_g(f, "Tipo_Pessoa_Gestor") or "").upper()
-        return _g(f, "Gestor"), (company_cnpj(doc) if kind != "PF" else None)
+        """All the fund's gestoras joined by GESTOR_SEP (names never contain ';': the CVM files are ';'-separated),
+        and the CNPJ of the first one listed."""
+        lst = gestores_by_id.get(_g(f, "ID_Registro_Fundo") or "", [])
+        if not lst:
+            return None, None
+        return GESTOR_SEP.join(n for n, _ in lst), lst[0][1]
 
     out: dict[str, dict[str, Any]] = {}
     rank = {"Em Funcionamento Normal": 0}
@@ -700,10 +715,19 @@ def build_cadastro(fundos: list[dict[str, str]], classes: list[dict[str, str]]
                 (rank.get(row["situacao"] or "", 1) == rank.get(prev["situacao"] or "", 1)
                  and (row["data_registro"] or date.min) > (prev["data_registro"] or date.min)):
             out[cnpj] = row
+    # Funds with no class row: a CNPJ can have several registrations (re-registered after a cancellation);
+    # keep the one not cancelled, else the newest, as for classes.
+    latest: dict[str, dict[str, str]] = {}
     for f in fundos:
         cnpj = fund_cnpj(f.get("CNPJ_Fundo"))
         if not cnpj or cnpj in out:
             continue
+        key = ((_g(f, "Situacao") or "") != "Cancelado", iso_date(f.get("Data_Registro")) or date.min)
+        prev = latest.get(cnpj)
+        if prev is None or key > ((_g(prev, "Situacao") or "") != "Cancelado",
+                                  iso_date(prev.get("Data_Registro")) or date.min):
+            latest[cnpj] = f
+    for cnpj, f in latest.items():
         g, gc = gestor(f)
         out[cnpj] = {
             "cnpj": cnpj, "origem": "fundo", "tipo": _g(f, "Tipo_Fundo"), "nome": _g(f, "Denominacao_Social"),

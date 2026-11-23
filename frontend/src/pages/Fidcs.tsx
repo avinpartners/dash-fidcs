@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { fidcList, saveText, type FidcRow } from "../api";
 import { Empty, ErrorBox, Loading, SituacaoTag } from "../components/ui";
-import { fmtBRLCompact, fmtDate, fmtInt, fmtMonth, fmtPct, fmtPctSigned, fold } from "../format";
+import { fmtBRLCompact, fmtDate, fmtInt, fmtMonth, fmtPct, fmtPctSigned, fold, gestoras } from "../format";
 import { useApi, useDebounced, useDocumentTitle } from "../lib/hooks";
 
 type Col = {
@@ -15,7 +15,8 @@ type Col = {
 
 const COLS: Col[] = [
   { key: "nome", label: "FIDC", width: 340 },
-  { key: "gestor", label: "Gestor", width: 220 },
+  { key: "gestor", label: "Gestor", width: 220, title: "Em cogestão, todas as gestoras do cadastro da CVM",
+    render: (r) => { const t = gestoras(r.gestor).join(" · ") || "—"; return <span className="ellipsis" title={t}>{t}</span>; } },
   { key: "administrador", label: "Administrador", width: 200 },
   { key: "segmento", label: "Segmento", width: 150, render: (r) => r.segmento ?? "—" },
   { key: "subsegmento", label: "Subsegmento", width: 160, render: (r) => r.subsegmento ?? "—" },
@@ -76,7 +77,10 @@ export default function Fidcs() {
     const o: Record<string, [string, number][]> = {};
     FILTERS.forEach((f) => {
       const m = new Map<string, number>();
-      rows.forEach((r) => { const v = r[f.key] as string | null; if (v) m.set(v, (m.get(v) ?? 0) + 1); });
+      rows.forEach((r) => {
+        const vals = f.key === "gestor" ? gestoras(r.gestor) : [r[f.key] as string | null];
+        vals.forEach((v) => { if (v) m.set(v, (m.get(v) ?? 0) + 1); });
+      });
       o[f.key] = [...m.entries()].sort((a, b) => b[1] - a[1]);
     });
     return o;
@@ -88,7 +92,7 @@ export default function Fidcs() {
     let out = rows.filter((r) => {
       for (const flt of FILTERS) {
         const v = sp.get(flt.key);
-        if (v && r[flt.key] !== v) return false;
+        if (v && (flt.key === "gestor" ? !gestoras(r.gestor).includes(v) : r[flt.key] !== v)) return false;
       }
       if (plMin && (r.pl ?? 0) < plMin * 1e6) return false;
       if (!f) return true;

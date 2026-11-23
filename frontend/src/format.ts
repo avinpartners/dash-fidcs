@@ -192,3 +192,6 @@ export function numberToInput(v: number | null | undefined): string {
 export function fold(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
+
+/** A co-managed FIDC lists every gestora, "A; B" (as the CVM registry has one row per gestora). */
+export const gestoras = (g: string | null | undefined): string[] => (g ? g.split("; ").filter(Boolean) : []);

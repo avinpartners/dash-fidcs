@@ -80,6 +80,16 @@ def main(argv: list[str]) -> int:
         "gestoras": [list(g) for g in groups["gestor"]],
         "administradores": [list(g) for g in groups["administrador"]],
     })
+    from app import validacao
+    rel = validacao.run()
+    total += _write(out / "validacao.json", rel)
+    if rel["erro"]:
+        log.warning("conferência com a CVM não rodou: %s", rel["erro"])
+    else:
+        div = {k: n for k, n in rel["divergencias"].items() if n}
+        log.info("conferência com a CVM (%s): %s", rel["competencia"], "sem divergências" if not div else div)
+        if div:
+            print(f"::warning::Conferência com a CVM encontrou divergências: {div}")
     total += _write(out / "meta.json", {"gerado_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                         "fundos": len(fund_ids), "cedentes": len(ced_ids)})
     log.info("exportado: %d fundos, %d cedentes, %.1f MB em %.0f s", len(fund_ids), len(ced_ids),

@@ -9,6 +9,48 @@ import { useApi, useDocumentTitle, useInterval } from "../lib/hooks";
 const TRIGGERS: Record<string, string> = { manual: "Manual", schedule: "Agendada", catch_up: "Recuperação" };
 const label = (n: string) => JOB_LABELS[n] ?? n;
 
+const fmtVal = (v: string | number | null) => (v == null || v === "" ? "—" : typeof v === "number" ? v.toLocaleString("pt-BR") : v);
+
+/** Conferência com a CVM: the dashboard compared field by field with the CVM files of the last update. */
+function Conferencia() {
+  const { data, error, reload } = useApi((s) => api.validacao(s), []);
+  const [aberto, setAberto] = useState<string | null>(null);
+  const title = "Conferência com a CVM";
+  const subtitle = "Cada FIDC do dash comparado com os arquivos da CVM da última atualização (cadastro e informe mensal)";
+  if (error) return <Card title={title}><ErrorBox error={error} onRetry={reload} /></Card>;
+  if (!data) return <Card title={title} subtitle={subtitle}><Loading label="Conferindo com os arquivos da CVM (leva uns segundos)…" /></Card>;
+  if (data.erro) return <Card title={title} subtitle={subtitle}><div className="state state-error">A conferência não rodou: {data.erro}</div></Card>;
+  const campos = Object.keys(data.conferidos);
+  const total = Object.values(data.divergencias).reduce((a, n) => a + n, 0);
+  return (
+    <Card title={title} subtitle={subtitle}>
+      <div className={total ? "state state-error" : "notice"} style={{ marginBottom: 10 }}>
+        {total ? <>⚠ {fmtInt(total)} divergência{total > 1 ? "s" : ""} encontrada{total > 1 ? "s" : ""}. Clique no campo para ver os fundos.</>
+          : <>✓ Tudo confere com a CVM: nenhuma divergência.</>}
+        <span className="muted small"> Informe de {fmtMonth(data.competencia, true)} · conferido {fmtDate(data.gerado_em, true)}</span>
+      </div>
+      <table className="grid compact">
+        <thead><tr><th>Campo</th><th className="num">Fundos conferidos</th><th className="num">Divergências</th></tr></thead>
+        <tbody>{campos.map((k) => (
+          <Fragment key={k}>
+            <tr className={data.divergencias[k] ? "clickable" : undefined} onClick={() => data.divergencias[k] && setAberto(aberto === k ? null : k)}>
+              <td>{data.rotulos[k] ?? k}</td><td className="num">{fmtInt(data.conferidos[k])}</td>
+              <td className="num">{data.divergencias[k] ? <span className="neg">{fmtInt(data.divergencias[k])}</span> : <span className="pos">0</span>}</td></tr>
+            {aberto === k && <tr><td colSpan={3}>
+              <table className="grid compact"><thead><tr><th>FIDC</th><th>No dash</th><th>Na CVM</th></tr></thead>
+                <tbody>{(data.exemplos[k] ?? []).map((e) => (
+                  <tr key={e.cnpj}><td className="wrap small">{e.nome} <span className="muted">{e.cnpj}</span></td>
+                    <td className="wrap small">{fmtVal(e.dash)}</td><td className="wrap small">{fmtVal(e.cvm)}</td></tr>))}</tbody></table>
+              {data.divergencias[k] > (data.exemplos[k]?.length ?? 0) && <div className="muted small">Mostrando {data.exemplos[k]?.length} de {fmtInt(data.divergencias[k])}.</div>}
+            </td></tr>}
+          </Fragment>))}</tbody>
+      </table>
+      {!!data.informativo?.administrador_mudou && <div className="muted small" style={{ marginTop: 8 }}>
+        Informativo: {fmtInt(data.informativo.administrador_mudou)} fundos com administrador no informe diferente do cadastro atual. {data.informativo.texto}</div>}
+    </Card>
+  );
+}
+
 function RunLog({ id }: { id: number }) {
   const { data, error } = useApi((s) => api.jobRun(id, s), [id]);
   if (error) return <div className="error small">{error.message}</div>;
@@ -54,6 +96,7 @@ export default function Status() {
         </Card>
       )}
       {active?.worker_alive === false && <div className="state state-error">As tarefas automáticas não estão rodando. Feche com Parar.cmd e abra de novo com Iniciar.cmd.</div>}
+      <Conferencia />
       <Card title="Tarefas">
         <table className="grid compact">
           <thead><tr><th>Tarefa</th><th>Frequência</th><th>Último sucesso</th><th>Última execução</th>{!STATIC && <><th>Próxima</th><th /></>}</tr></thead>

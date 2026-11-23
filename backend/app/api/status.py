@@ -104,3 +104,21 @@ def status():
     if not out["jobs"]:          # database down: the job list without run data, no second connection attempt
         out["jobs"] = clean(jobs_list(skip_db=True))
     return out
+
+
+# Conferência com a CVM (app/validacao.py): reading the CVM zips again takes ~20 s, so the answer is kept until
+# new files are downloaded.
+_validacao_cache: dict[str, Any] = {}
+
+
+@router.get("/validacao")
+def validacao():
+    from app import validacao as v
+    try:
+        with connection() as conn:
+            key = str(conn.execute("SELECT max(id), max(fetched_at) FROM raw_files").fetchone())
+    except (psycopg.Error, OSError):
+        key = None
+    if key is None or _validacao_cache.get("key") != key:
+        _validacao_cache.update(key=key, data=v.run())
+    return _validacao_cache["data"]

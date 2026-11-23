@@ -124,6 +124,13 @@ export interface StatusResponse {
   issues: { by_kind: Dict; open: { id: number; kind: string; cnpj: string | null; name: string | null; ref_month: string | null; detail: unknown; created_at: string }[] };
   db: { ok: boolean; error?: string; server_version?: string; size_bytes?: number; schema_version?: number; tables?: Dict };
 }
+export interface ValidacaoItem { cnpj: string; nome: string; dash: string | number | null; cvm: string | number | null }
+export interface Validacao {
+  gerado_em: string; ok: boolean; competencia: string | null; erro: string | null;
+  arquivos: { cadastro?: { url: string; baixado_em: string }; informe?: { url: string; baixado_em: string } };
+  conferidos: Dict; divergencias: Dict; exemplos: Record<string, ValidacaoItem[]>;
+  informativo: { administrador_mudou?: number; texto?: string }; rotulos: Record<string, string>;
+}
 export interface ActiveJobs {
   current: { job: string; trigger: string; started_at: string; progress: number | null; message: string | null; run_id: number | null } | null;
   queued: { job: string }[]; worker_alive: boolean;
@@ -149,6 +156,7 @@ export const api = {
   cedente: (cnpj: string, s?: AbortSignal) => get<CedenteDetail>(`/cedentes/${encodeURIComponent(cnpj)}`, s),
   search: (q: string, s?: AbortSignal) => STATIC ? staticSearch(q) : get<{ hits: SearchHit[] }>(`/search?q=${encodeURIComponent(q)}`, s),
   status: (s?: AbortSignal) => get<StatusResponse>("/status", s),
+  validacao: (s?: AbortSignal) => get<Validacao>("/validacao", s),
   jobsActive: (s?: AbortSignal) => STATIC ? Promise.resolve<ActiveJobs>({ current: null, queued: [], worker_alive: true })
     : get<ActiveJobs>("/jobs/active", s),
   jobRun: (id: number, s?: AbortSignal) => get<JobRun>(`/jobs/runs/${id}`, s),
